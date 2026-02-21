@@ -30,7 +30,7 @@ if (envPath) {
   }
 }
 
-const OUTPUT_DIR = resolve(
+const DEFAULT_OUTPUT_DIR = resolve(
   process.env.HOME || "/home/hal",
   "workspace/obsidian/Clippings"
 );
@@ -238,6 +238,7 @@ async function main() {
 
 Options:
   --lang <code>    Language code for transcript (default: ja, fallback: en)
+  --out <dir>      Output directory (default: ~/workspace/obsidian/Clippings)
   --no-summary     Skip AI summary generation
   --help, -h       Show this help message
 
@@ -247,17 +248,22 @@ Environment:
 Examples:
   yt-transcript https://www.youtube.com/watch?v=xxxxx
   yt-transcript https://youtu.be/xxxxx --lang en
-  yt-transcript https://youtu.be/xxxxx --no-summary`);
+  yt-transcript https://youtu.be/xxxxx --no-summary
+  yt-transcript https://youtu.be/xxxxx --out ./output`);
     process.exit(0);
   }
 
   let url = "";
   let preferredLang = "ja";
   let skipSummary = false;
+  let outputDir = DEFAULT_OUTPUT_DIR;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--lang" && args[i + 1]) {
       preferredLang = args[i + 1];
+      i++;
+    } else if (args[i] === "--out" && args[i + 1]) {
+      outputDir = resolve(args[i + 1]);
       i++;
     } else if (args[i] === "--no-summary") {
       skipSummary = true;
@@ -366,7 +372,7 @@ Examples:
   const markdown = `${frontmatter}\n${summarySection}\n## Transcript\n\n${transcriptText}\n`;
 
   const filename = `${sanitizeFilename(meta.title)}.md`;
-  const outputPath = resolve(OUTPUT_DIR, filename);
+  const outputPath = resolve(outputDir, filename);
 
   writeFileSync(outputPath, markdown, "utf-8");
   console.log(`\nSaved: ${outputPath}`);

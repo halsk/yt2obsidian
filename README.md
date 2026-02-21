@@ -43,11 +43,14 @@ npx tsx src/index.ts https://youtu.be/xxxxx --lang en
 
 # 要約なし（トランスクリプトのみ）
 npx tsx src/index.ts https://youtu.be/xxxxx --no-summary
+
+# 出力先を指定
+npx tsx src/index.ts https://youtu.be/xxxxx --out ./output
 ```
 
 ## Output
 
-`~/workspace/obsidian/Clippings/` に以下の形式で保存:
+デフォルトでは `~/workspace/obsidian/Clippings/` に以下の形式で保存（`--out` で変更可）:
 
 ```markdown
 ---
