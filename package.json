@@ -1,0 +1,22 @@
+{
+  "name": "yt-transcript",
+  "version": "1.0.0",
+  "description": "YouTube transcript to Obsidian Clippings markdown",
+  "bin": {
+    "yt-transcript": "./dist/index.js"
+  },
+  "scripts": {
+    "transcript": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "@playzone/youtube-transcript": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
