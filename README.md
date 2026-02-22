@@ -68,6 +68,44 @@ npm start
 
 デフォルトで `0.0.0.0:3456` でリッスン（`PORT` 環境変数で変更可）。
 
+### 常時起動（systemd）
+
+```bash
+# サービスファイル作成
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/yt2obsidian.service << 'EOF'
+[Unit]
+Description=YT2Obsidian - YouTube transcript to Obsidian
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/yt2obsidian
+ExecStart=/usr/bin/npx tsx src/server.ts
+Restart=always
+RestartSec=5
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
+EOF
+
+# 有効化・起動
+systemctl --user daemon-reload
+systemctl --user enable yt2obsidian
+systemctl --user start yt2obsidian
+```
+
+管理コマンド:
+
+```bash
+systemctl --user status yt2obsidian   # 状態確認
+systemctl --user restart yt2obsidian  # 再起動
+systemctl --user stop yt2obsidian     # 停止
+journalctl --user -u yt2obsidian -f   # ログ確認
+```
+
 ### エンドポイント
 
 | Method | Path | 説明 |
