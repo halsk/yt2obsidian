@@ -180,10 +180,15 @@ function formatTimestamp(seconds: number): string {
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
+interface SummaryResult {
+  summary: string;
+  tags: string[];
+}
+
 async function generateSummary(
   title: string,
   transcriptText: string
-): Promise<string> {
+): Promise<SummaryResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY is not set");
@@ -207,13 +212,22 @@ async function generateSummary(
       messages: [
         {
           role: "user",
-          content: `以下はYouTube動画「${title}」のトランスクリプトです。この内容を日本語で要約してください。
+          content: `以下はYouTube動画「${title}」のトランスクリプトです。2つのタスクを実行してください。
 
-要件:
-- 動画の主要なポイントを箇条書き（3〜7個）でまとめる
+## タスク1: 要約
+動画の主要なポイントを箇条書き（3〜7個）でまとめてください。
 - 各ポイントは1〜2文で簡潔に
 - 専門用語はそのまま残す
-- Markdown記法で出力（見出し不要、箇条書きのみ）
+- Markdown箇条書きで出力（見出し不要）
+
+## タスク2: タグ生成
+この動画の内容を分類するObsidian用タグを5つ生成してください。
+- 動画のジャンル、トピック、分野を表すタグ
+- 英語の小文字、ハイフン区切り（例: machine-learning, economics）
+- 汎用的すぎず、具体的すぎない粒度
+
+以下のJSON形式で出力してください（JSON以外は出力しない）:
+{"summary": "箇条書きの要約テキスト", "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]}
 
 トランスクリプト:
 ${truncated}`,
@@ -232,7 +246,17 @@ ${truncated}`,
   };
   const text = data.content.find((b) => b.type === "text")?.text;
   if (!text) throw new Error("Empty response from Anthropic API");
-  return text.trim();
+
+  try {
+    const parsed = JSON.parse(text.trim());
+    return {
+      summary: parsed.summary || text.trim(),
+      tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
+    };
+  } catch {
+    // Fallback: treat entire response as summary, no tags
+    return { summary: text.trim(), tags: [] };
+  }
 }
 
 export function sanitizeFilename(name: string): string {
@@ -277,7 +301,7 @@ export function syncObsidianVault(log?: (msg: string) => void): void {
     execSync("git add -A", { cwd: OBSIDIAN_VAULT_DIR, stdio: "pipe" });
 
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
-    execSync(`git commit -m "yt-transcript: auto-sync ${timestamp}"`, {
+    execSync(`git commit -m "yt2obsidian: auto-sync ${timestamp}"`, {
       cwd: OBSIDIAN_VAULT_DIR,
       stdio: "pipe",
     });
@@ -356,6 +380,29 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
       ? meta.description.slice(0, 200) + "..."
       : meta.description;
 
+  // Generate summary + AI tags
+  let summarySection = "";
+  let aiTags: string[] = [];
+  if (!skipSummary) {
+    log(`Generating summary with ${HAIKU_MODEL}...`);
+    try {
+      const result = await generateSummary(meta.title, transcriptText);
+      summarySection = `\n## Summary\n\n${result.summary}\n`;
+      aiTags = result.tags;
+      log("Summary generated.");
+      if (aiTags.length > 0) log(`Tags: ${aiTags.join(", ")}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log(`Warning: Summary generation failed (${msg}). Skipping.`);
+    }
+  }
+
+  const tagLines = [
+    '  - "youtube"',
+    '  - "clippings"',
+    ...aiTags.map((t) => `  - "${t}"`),
+  ];
+
   const frontmatter = [
     "---",
     `title: ${escapeYamlString(meta.title)}`,
@@ -366,25 +413,11 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
     `created: ${today}`,
     `description: ${escapeYamlString(descShort)}`,
     "tags:",
-    '  - "clippings"',
-    '  - "youtube-transcript"',
+    ...tagLines,
     "---",
   ]
     .filter(Boolean)
     .join("\n");
-
-  let summarySection = "";
-  if (!skipSummary) {
-    log(`Generating summary with ${HAIKU_MODEL}...`);
-    try {
-      const summary = await generateSummary(meta.title, transcriptText);
-      summarySection = `\n## Summary\n\n${summary}\n`;
-      log("Summary generated.");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log(`Warning: Summary generation failed (${msg}). Skipping.`);
-    }
-  }
 
   const markdown = `${frontmatter}\n${summarySection}\n## Transcript\n\n${transcriptText}\n`;
 

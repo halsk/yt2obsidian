@@ -7,7 +7,7 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
-    console.log(`Usage: yt-transcript <youtube-url> [options]
+    console.log(`Usage: yt2obsidian <youtube-url> [options]
 
 Options:
   --lang <code>    Language code for transcript (default: ja, fallback: en)
@@ -20,10 +20,10 @@ Environment:
   ANTHROPIC_API_KEY  Required for AI summary (Claude Haiku)
 
 Examples:
-  yt-transcript https://www.youtube.com/watch?v=xxxxx
-  yt-transcript https://youtu.be/xxxxx --lang en
-  yt-transcript https://youtu.be/xxxxx --no-summary
-  yt-transcript https://youtu.be/xxxxx --out ./output`);
+  yt2obsidian https://www.youtube.com/watch?v=xxxxx
+  yt2obsidian https://youtu.be/xxxxx --lang en
+  yt2obsidian https://youtu.be/xxxxx --no-summary
+  yt2obsidian https://youtu.be/xxxxx --out ./output`);
     process.exit(0);
   }
 

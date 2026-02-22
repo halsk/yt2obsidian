@@ -1,4 +1,4 @@
-# yt-transcript
+# yt2obsidian
 
 YouTube動画のトランスクリプト（字幕）を取得し、AI要約付きのMarkdownファイルとしてObsidianに保存するCLI & HTTPサーバー。
 
@@ -73,24 +73,20 @@ npm start
 | Method | Path | 説明 |
 |--------|------|------|
 | GET | `/` | モバイル対応Webフォーム |
-| POST | `/api/transcript` | JSON API |
+| GET/POST | `/api/transcript` | トランスクリプト API |
 | GET | `/health` | ヘルスチェック |
+| GET | `/debug` | リクエストエコー（デバッグ用） |
 
 ### API
 
 ```bash
+# GET（iOS ショートカット向け）
+curl "http://localhost:3456/api/transcript?url=https://youtu.be/xxxxx&skipSummary=true"
+
+# POST（JSON）
 curl -X POST http://localhost:3456/api/transcript \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://youtu.be/xxxxx","skipSummary":true}'
-```
-
-リクエスト:
-```json
-{
-  "url": "https://youtu.be/xxxxx",
-  "lang": "ja",
-  "skipSummary": false
-}
 ```
 
 レスポンス:
@@ -109,14 +105,13 @@ curl -X POST http://localhost:3456/api/transcript \
 
 Tailscale経由でスマホから使用:
 
-1. ショートカットアプリで「YT Transcript」を作成
-2. 共有シート入力を「URL」に設定
-3. 「URLの内容を取得」アクション追加:
-   - URL: `http://<tailscale-hostname>:3456/api/transcript`
-   - Method: POST
-   - Content-Type: `application/json`
-   - Body: `{"url":"(共有シートの入力)"}`
-4. 「通知を表示」で結果を表示
+1. ショートカットアプリで「YT2Obsidian」を作成
+2. 共有シートに表示を有効化（詳細 → 「Receive What's On Screen」をON）
+3. アクション追加:
+   - **テキスト**: `http://<tailscale-hostname>:3456/api/transcript?url=` + ショートカットの入力
+   - **URLの内容を取得**: 上のテキスト（GET）
+   - **辞書の値を取得**: `title`
+   - **通知を表示**: `保存完了: (title)`
 
 ## Output
 
@@ -132,8 +127,13 @@ published: 2025-01-15
 created: 2026-02-22
 description: "動画の説明（先頭200文字）"
 tags:
+  - "youtube"
   - "clippings"
-  - "youtube-transcript"
+  - "economics"        # AI生成（要約あり時のみ）
+  - "interest-rates"   # AI生成
+  - "financial-policy" # AI生成
+  - "japan-economy"    # AI生成
+  - "investment"       # AI生成
 ---
 
 ## Summary

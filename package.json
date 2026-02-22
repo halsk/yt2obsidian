@@ -1,9 +1,9 @@
 {
-  "name": "yt-transcript",
+  "name": "yt2obsidian",
   "version": "1.0.0",
   "description": "YouTube transcript to Obsidian Clippings markdown",
   "bin": {
-    "yt-transcript": "./dist/index.js"
+    "yt2obsidian": "./dist/index.js"
   },
   "scripts": {
     "transcript": "tsx src/index.ts",

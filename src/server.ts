@@ -233,6 +233,6 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`yt-transcript server listening on http://0.0.0.0:${PORT}`);
+  console.log(`yt2obsidian server listening on http://0.0.0.0:${PORT}`);
   console.log(`Output dir: ${DEFAULT_OUTPUT_DIR}`);
 });
