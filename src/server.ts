@@ -12,7 +12,7 @@ const HTML_FORM = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>YT Transcript</title>
+<title>YT2Obsidian</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -64,7 +64,7 @@ const HTML_FORM = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>YT Transcript</h1>
+<h1>YT2Obsidian</h1>
 <form id="f">
   <div>
     <label for="url">YouTube URL</label>
@@ -84,10 +84,28 @@ const HTML_FORM = `<!DOCTYPE html>
   <button type="submit" id="btn">Save Transcript</button>
 </form>
 <div id="result"></div>
+<details style="margin-top:24px">
+  <summary style="color:#888;cursor:pointer;font-size:0.85rem">Bookmarklet</summary>
+  <p style="color:#777;font-size:0.8rem;margin:8px 0">
+    Drag to bookmarks bar. Click on any YouTube page to save transcript:
+  </p>
+  <a id="bookmarklet" href="#" style="display:inline-block;padding:8px 16px;background:#333;color:#fff;border-radius:6px;text-decoration:none;font-size:0.85rem">YT2Obsidian</a>
+</details>
 <script>
 const f = document.getElementById("f");
 const btn = document.getElementById("btn");
 const res = document.getElementById("result");
+const urlInput = document.getElementById("url");
+// Auto-fill from ?url= query param (bookmarklet redirect)
+const params = new URLSearchParams(location.search);
+if (params.get("url")) {
+  urlInput.value = params.get("url");
+  f.dispatchEvent(new Event("submit"));
+}
+// Generate bookmarklet with current host
+const bm = document.getElementById("bookmarklet");
+const origin = location.origin;
+bm.href = "javascript:void(location.href='" + origin + "/?url='+encodeURIComponent(location.href))";
 f.addEventListener("submit", async (e) => {
   e.preventDefault();
   btn.disabled = true;
@@ -99,7 +117,7 @@ f.addEventListener("submit", async (e) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        url: document.getElementById("url").value,
+        url: urlInput.value,
         lang: document.getElementById("lang").value,
         skipSummary: document.getElementById("skip").checked,
       }),
