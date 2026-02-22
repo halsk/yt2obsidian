@@ -141,6 +141,7 @@ const server = createServer(async (req, res) => {
   }
 
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
+  console.log(`[req] ${req.method} ${req.url} from ${req.headers["user-agent"]?.slice(0, 50)}`);
 
   // GET / → Web form
   if (req.method === "GET" && url.pathname === "/") {
@@ -156,18 +157,41 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // POST /api/transcript
-  if (req.method === "POST" && url.pathname === "/api/transcript") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
+  // GET /debug — echo everything the client sends
+  if (req.method === "GET" && url.pathname === "/debug") {
+    const echo = {
+      method: req.method,
+      url: req.url,
+      params: Object.fromEntries(url.searchParams),
+      headers: req.headers,
+    };
+    console.log(`[debug]`, JSON.stringify(echo, null, 2));
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(echo, null, 2));
+    return;
+  }
 
+
+  // GET|POST /api/transcript
+  if (url.pathname === "/api/transcript" && (req.method === "GET" || req.method === "POST")) {
     let payload: { url?: string; lang?: string; skipSummary?: boolean };
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid JSON" }));
-      return;
+
+    if (req.method === "GET") {
+      payload = {
+        url: url.searchParams.get("url") || undefined,
+        lang: url.searchParams.get("lang") || undefined,
+        skipSummary: url.searchParams.get("skipSummary") === "true",
+      };
+    } else {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON" }));
+        return;
+      }
     }
 
     if (!payload.url) {
