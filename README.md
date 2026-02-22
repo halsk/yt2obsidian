@@ -15,8 +15,8 @@ YouTube動画のトランスクリプト（字幕）を取得し、AI要約付�
 ## Setup
 
 ```bash
-git clone https://github.com/halsk/yt-transcript.git
-cd yt-transcript
+git clone https://github.com/halsk/yt2obsidian.git
+cd yt2obsidian
 npm install
 ```
 
