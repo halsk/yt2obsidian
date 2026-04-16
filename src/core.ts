@@ -42,7 +42,7 @@ loadEnv();
 
 export const DEFAULT_OUTPUT_DIR = resolve(
   process.env.HOME || "/home/hal",
-  "workspace/obsidian/Clippings"
+  "workspace/obsidian/raw/articles"
 );
 
 export interface VideoMeta {

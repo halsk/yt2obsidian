@@ -11,7 +11,7 @@ async function main() {
 
 Options:
   --lang <code>    Language code for transcript (default: ja, fallback: en)
-  --out <dir>      Output directory (default: ~/workspace/obsidian/Clippings)
+  --out <dir>      Output directory (default: ~/workspace/obsidian/raw/articles)
   --no-summary     Skip AI summary generation
   --no-sync        Skip Obsidian vault git sync
   --help, -h       Show this help message
