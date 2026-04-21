@@ -79,6 +79,7 @@ export function extractVideoId(input: string): string {
     /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
     /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
     /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+    /(?:youtube\.com\/live\/)([a-zA-Z0-9_-]{11})/,
   ];
 
   for (const pattern of patterns) {
@@ -88,7 +89,7 @@ export function extractVideoId(input: string): string {
 
   if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
 
-  throw new Error(`Invalid YouTube URL or video ID: ${input}`);
+  throw new Error(`無効なYouTube URLです: ${input}`);
 }
 
 export async function fetchVideoMeta(videoId: string): Promise<VideoMeta> {
@@ -362,7 +363,9 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
       transcript = await api.fetch(videoId);
       log(`Transcript found (lang: ${transcript.languageCode}, ${transcript.language})`);
     } catch {
-      throw new Error("No transcript available for this video.");
+      throw new Error(
+        "この動画には字幕（トランスクリプト）がありません。ライブ配信アーカイブの場合、自動字幕が生成されるまで数時間〜数日かかることがあります。"
+      );
     }
   }
 
