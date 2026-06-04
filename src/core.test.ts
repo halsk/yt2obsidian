@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   extractVideoId,
-  formatTranscriptWithOllama,
   formatTranscriptMechanical,
   formatTranscriptForOutput,
   type TranscriptSnippet,
@@ -56,123 +55,164 @@ const SAMPLE_SNIPPETS: TranscriptSnippet[] = [
 ];
 
 describe("formatTranscriptMechanical", () => {
-  it("groups sentences into paragraphs by punctuation", () => {
+  it("returns empty string for empty snippets", () => {
+    expect(formatTranscriptMechanical([])).toBe("");
+  });
+
+  it("single snippet returns one paragraph with [00:00] prefix", () => {
+    const result = formatTranscriptMechanical([{ text: "Hello world.", start: 0 }]);
+    expect(result).toBe("[00:00] Hello world.");
+  });
+
+  it("timestamp format: 0 seconds -> [00:00]", () => {
+    const result = formatTranscriptMechanical([{ text: "test", start: 0 }]);
+    expect(result).toMatch(/^\[00:00\]/);
+  });
+
+  it("timestamp format: 90 seconds -> [01:30]", () => {
+    const result = formatTranscriptMechanical([{ text: "test", start: 90 }]);
+    expect(result).toMatch(/^\[01:30\]/);
+  });
+
+  it("gap >= 30s triggers new paragraph", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "first", start: 0 },
+      { text: "second", start: 31 },
+    ];
+    const result = formatTranscriptMechanical(snippets);
+    const paragraphs = result.split("\n\n");
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0]).toMatch(/^\[00:00\]/);
+    expect(paragraphs[1]).toMatch(/^\[00:31\]/);
+  });
+
+  it("gap < 30s keeps snippets in same paragraph", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "first ", start: 0 },
+      { text: "second ", start: 10 },
+      { text: "third", start: 20 },
+    ];
+    const result = formatTranscriptMechanical(snippets);
+    const paragraphs = result.split("\n\n");
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]).toContain("first");
+    expect(paragraphs[0]).toContain("second");
+    expect(paragraphs[0]).toContain("third");
+  });
+
+  it("exactly 30s gap triggers new paragraph (>= threshold)", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "a", start: 0 },
+      { text: "b", start: 30 },
+    ];
+    const result = formatTranscriptMechanical(snippets);
+    expect(result.split("\n\n")).toHaveLength(2);
+  });
+
+  it("20 snippets close together stays in one paragraph (size limit at >= 20)", () => {
+    const snippets: TranscriptSnippet[] = Array.from({ length: 20 }, (_, i) => ({
+      text: `s${i} `,
+      start: i,
+    }));
+    const result = formatTranscriptMechanical(snippets);
+    expect(result.split("\n\n")).toHaveLength(1);
+  });
+
+  it("21 snippets close together splits into 2 paragraphs at the 20-snippet limit", () => {
+    const snippets: TranscriptSnippet[] = Array.from({ length: 21 }, (_, i) => ({
+      text: `s${i} `,
+      start: i,
+    }));
+    const result = formatTranscriptMechanical(snippets);
+    const paragraphs = result.split("\n\n");
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0]).toMatch(/^\[00:00\]/);
+    expect(paragraphs[1]).toMatch(/^\[00:20\]/);
+  });
+
+  it("paragraphs joined with \\n\\n (blank line separator)", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "first", start: 0 },
+      { text: "second", start: 60 },
+    ];
+    const result = formatTranscriptMechanical(snippets);
+    expect(result).toContain("\n\n");
+    expect(result.split("\n\n")).toHaveLength(2);
+  });
+
+  it("text whitespace is normalized within paragraph", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "hello  world", start: 0 },
+      { text: "  extra  spaces  ", start: 5 },
+    ];
+    const result = formatTranscriptMechanical(snippets);
+    // Should not have consecutive whitespace after normalization
+    expect(result).not.toMatch(/[^\S\n]{2,}/);
+  });
+
+  it("paragraph timestamp is from the first snippet in the chunk", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "one ", start: 65 },
+      { text: "two", start: 70 },
+    ];
+    const result = formatTranscriptMechanical(snippets);
+    expect(result).toMatch(/^\[01:05\]/);
+  });
+
+  it("chunkBySeconds option overrides default 30s threshold", () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "a", start: 0 },
+      { text: "b", start: 10 },
+    ];
+    const result = formatTranscriptMechanical(snippets, { chunkBySeconds: 5 });
+    expect(result.split("\n\n")).toHaveLength(2);
+  });
+
+  it("chunkBySnippets option overrides default 20-snippet limit", () => {
+    const snippets: TranscriptSnippet[] = Array.from({ length: 5 }, (_, i) => ({
+      text: `s${i} `,
+      start: i,
+    }));
+    const result = formatTranscriptMechanical(snippets, { chunkBySnippets: 3 });
+    expect(result.split("\n\n")).toHaveLength(2);
+  });
+
+  it("contains TypeScript content from sample snippets", () => {
     const result = formatTranscriptMechanical(SAMPLE_SNIPPETS);
     expect(result).toContain("TypeScript");
     expect(result.length).toBeGreaterThan(0);
   });
-
-  it("returns non-empty string for single snippet", () => {
-    const result = formatTranscriptMechanical([{ text: "Hello.", start: 0 }]);
-    expect(result).toBe("Hello.");
-  });
-});
-
-describe("formatTranscriptWithOllama", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("returns null when fetch throws (fallback path)", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
-    const result = await formatTranscriptWithOllama("some text", {
-      ollamaUrl: "http://localhost:11434",
-    });
-    expect(result).toBeNull();
-  });
-
-  it("returns null when HTTP response is not ok", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: false, status: 503 })
-    );
-    const result = await formatTranscriptWithOllama("some text", {
-      ollamaUrl: "http://localhost:11434",
-    });
-    expect(result).toBeNull();
-  });
-
-  it("returns formatted text on successful Ollama response", async () => {
-    const formattedText = "今日はプログラミングについて話します。\n\n型安全性はバグを減らし、開発効率も上がります。";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ message: { content: formattedText } }),
-      })
-    );
-    const plainText = "今日はプログラミングについて話します 型安全性はバグを減らし 開発効率も上がります";
-    const result = await formatTranscriptWithOllama(plainText, {
-      ollamaUrl: "http://localhost:11434",
-    });
-    expect(result).toBe(formattedText);
-  });
-
-  it("returns null when output is less than 70% of input length", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ message: { content: "short" } }),
-      })
-    );
-    const longText = "a".repeat(100);
-    const result = await formatTranscriptWithOllama(longText, {
-      ollamaUrl: "http://localhost:11434",
-    });
-    expect(result).toBeNull();
-  });
 });
 
 describe("formatTranscriptForOutput", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it("rawLines length equals snippets length", async () => {
+    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
+    expect(rawLines).toHaveLength(SAMPLE_SNIPPETS.length);
   });
 
-  it("falls back to mechanical when Ollama fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    const { formatted, rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS, {
-      useLocalLlm: true,
-      ollamaUrl: "http://localhost:11434",
-    });
-    expect(formatted.length).toBeGreaterThan(0);
-    expect(rawLines).toHaveLength(SAMPLE_SNIPPETS.length);
+  it("rawLines entries have [mm:ss] prefix and original snippet text", async () => {
+    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
+    expect(rawLines[0]).toMatch(/^\[00:00\]/);
+    expect(rawLines[0]).toContain(SAMPLE_SNIPPETS[0].text);
+  });
+
+  it("all rawLines contain their corresponding original snippet text", async () => {
+    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
     rawLines.forEach((line, i) => {
       expect(line).toContain(SAMPLE_SNIPPETS[i].text);
     });
   });
 
-  it("uses Ollama output when available", async () => {
-    // Must be >= 70% of plain text length to pass the threshold check
-    const ollamaOut =
-      "今日はプログラミングについて話します。特にTypeScriptの型システムが重要です。\n\n型安全性はバグを減らし、また開発効率も上がります。ぜひ試してみてください！";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ message: { content: ollamaOut } }),
-      })
-    );
-    const { formatted } = await formatTranscriptForOutput(SAMPLE_SNIPPETS, {
-      useLocalLlm: true,
-      ollamaUrl: "http://localhost:11434",
-    });
-    expect(formatted).toBe(ollamaOut);
+  it("formatted is a non-empty string with [mm:ss] timestamp prefix", async () => {
+    const { formatted } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
+    expect(typeof formatted).toBe("string");
+    expect(formatted.length).toBeGreaterThan(0);
+    expect(formatted).toMatch(/^\[00:00\]/);
   });
 
-  it("rawLines contains timestamped original snippets", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS, {
-      useLocalLlm: false,
-    });
-    expect(rawLines[0]).toMatch(/^\[00:00\]/);
-    expect(rawLines[0]).toContain(SAMPLE_SNIPPETS[0].text);
-  });
-
-  it("skips Ollama when useLocalLlm is false", async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-    await formatTranscriptForOutput(SAMPLE_SNIPPETS, { useLocalLlm: false });
-    expect(fetchSpy).not.toHaveBeenCalled();
+  it("formatted text differs from raw joined snippets (paragraphs merged)", async () => {
+    const { formatted, rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
+    // rawLines has one entry per snippet; formatted may have fewer paragraphs
+    expect(rawLines.length).toBeGreaterThanOrEqual(formatted.split("\n\n").length);
   });
 });

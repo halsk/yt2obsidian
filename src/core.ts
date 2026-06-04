@@ -46,7 +46,7 @@ export const DEFAULT_OUTPUT_DIR = resolve(
 );
 
 // ---------------------------------------------------------------------------
-// Transcript formatting (Ollama + mechanical fallback)
+// Transcript formatting (mechanical)
 // ---------------------------------------------------------------------------
 
 export interface TranscriptSnippet {
@@ -54,103 +54,36 @@ export interface TranscriptSnippet {
   start: number;
 }
 
-export interface TranscriptFormatOptions {
-  ollamaUrl?: string;
-  ollamaModel?: string;
-  useLocalLlm?: boolean;
-}
-
-const OLLAMA_PROMPT = (plainText: string) =>
-  `以下は YouTube 動画の自動文字起こしです。意味のまとまりで段落に分け、句読点 (。、！？) を適切に補ってください。
-
-厳守事項:
-- 内容を一切変えない (語句追加・削除・言い換え禁止)
-- 段落の間は空行で区切る
-- 出力はテキストのみ (マークダウン記号や見出し不要)
-
-文字起こし:
-${plainText}`;
-
-export async function formatTranscriptWithOllama(
-  plainText: string,
-  opts: TranscriptFormatOptions = {}
-): Promise<string | null> {
-  const url = opts.ollamaUrl ?? process.env.OLLAMA_URL ?? "http://localhost:11434";
-  const model = opts.ollamaModel ?? process.env.OLLAMA_MODEL ?? "qwen2.5:7b";
-
-  let res: Response;
-  try {
-    res = await fetch(`${url}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        options: { temperature: 0.0 },
-        messages: [{ role: "user", content: OLLAMA_PROMPT(plainText) }],
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch {
-    return null;
-  }
-
-  if (!res.ok) return null;
-
-  const data = (await res.json()) as { message?: { content?: string } };
-  const output = data.message?.content?.trim() ?? "";
-
-  if (output.length < plainText.length * 0.7) return null;
-
-  return output;
-}
-
 export function formatTranscriptMechanical(
-  snippets: TranscriptSnippet[]
+  snippets: TranscriptSnippet[],
+  opts: { chunkBySeconds?: number; chunkBySnippets?: number } = {}
 ): string {
-  const sentences: string[] = [];
-  let buffer = "";
-
-  for (const s of snippets) {
-    buffer += s.text;
-    if (/[。！？!?]$/.test(buffer.trim())) {
-      sentences.push(buffer.trim());
-      buffer = "";
-    } else {
-      buffer += " ";
-    }
-  }
-  if (buffer.trim()) sentences.push(buffer.trim());
-
+  const CHUNK_SECONDS = opts.chunkBySeconds ?? 30;
+  const CHUNK_SIZE = opts.chunkBySnippets ?? 20;
   const paragraphs: string[] = [];
-  for (let i = 0; i < sentences.length; i += 4) {
-    paragraphs.push(sentences.slice(i, i + 4).join(""));
+  let buf: TranscriptSnippet[] = [];
+  for (let i = 0; i < snippets.length; i++) {
+    buf.push(snippets[i]);
+    const next = snippets[i + 1];
+    const gap = next ? next.start - snippets[i].start : Infinity;
+    const sizeLimit = buf.length >= CHUNK_SIZE;
+    if (!next || gap >= CHUNK_SECONDS || sizeLimit) {
+      const headStart = buf[0].start;
+      const text = buf.map((s) => s.text).join("").replace(/\s+/g, " ").trim();
+      paragraphs.push(`[${formatTimestamp(headStart)}] ${text}`);
+      buf = [];
+    }
   }
   return paragraphs.join("\n\n");
 }
 
 export async function formatTranscriptForOutput(
-  snippets: TranscriptSnippet[],
-  opts: TranscriptFormatOptions = {}
+  snippets: TranscriptSnippet[]
 ): Promise<{ formatted: string; rawLines: string[] }> {
-  const useLocalLlm =
-    opts.useLocalLlm ?? (process.env.USE_LOCAL_LLM !== "false");
-
   const rawLines = snippets.map(
     (s) => `[${formatTimestamp(s.start)}] ${s.text}`
   );
-  const plainText = snippets.map((s) => s.text).join(" ");
-
-  let formatted: string | null = null;
-
-  if (useLocalLlm) {
-    formatted = await formatTranscriptWithOllama(plainText, opts);
-  }
-
-  if (!formatted) {
-    formatted = formatTranscriptMechanical(snippets);
-  }
-
+  const formatted = formatTranscriptMechanical(snippets);
   return { formatted, rawLines };
 }
 
@@ -478,7 +411,7 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
     }
   }
 
-  // Format transcript: Ollama paragraph segmentation with mechanical fallback
+  // Format transcript
   log("Formatting transcript...");
   const snippets: TranscriptSnippet[] = transcript.snippets.map(
     (s: { text: string; start: number }) => ({ text: s.text, start: s.start })
