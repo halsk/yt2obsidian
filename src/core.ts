@@ -45,6 +45,45 @@ export const DEFAULT_OUTPUT_DIR = resolve(
   "workspace/obsidian/raw/articles"
 );
 
+// ---------------------------------------------------------------------------
+// Transcript formatting (mechanical)
+// ---------------------------------------------------------------------------
+
+export interface TranscriptSnippet {
+  text: string;
+  start: number;
+}
+
+export function formatTranscriptMechanical(
+  snippets: TranscriptSnippet[],
+  opts: { chunkBySeconds?: number; chunkBySnippets?: number } = {}
+): string {
+  const CHUNK_SECONDS = opts.chunkBySeconds ?? 30;
+  const CHUNK_SIZE = opts.chunkBySnippets ?? 20;
+  const paragraphs: string[] = [];
+  let buf: TranscriptSnippet[] = [];
+  for (let i = 0; i < snippets.length; i++) {
+    buf.push(snippets[i]);
+    const next = snippets[i + 1];
+    const gap = next ? next.start - snippets[i].start : Infinity;
+    const sizeLimit = buf.length >= CHUNK_SIZE;
+    if (!next || gap >= CHUNK_SECONDS || sizeLimit) {
+      const headStart = buf[0].start;
+      const text = buf.map((s) => s.text).join("").replace(/\s+/g, " ").trim();
+      paragraphs.push(`[${formatTimestamp(headStart)}] ${text}`);
+      buf = [];
+    }
+  }
+  return paragraphs.join("\n\n");
+}
+
+export async function formatTranscriptForOutput(
+  snippets: TranscriptSnippet[]
+): Promise<{ formatted: string }> {
+  const formatted = formatTranscriptMechanical(snippets);
+  return { formatted };
+}
+
 export interface VideoMeta {
   title: string;
   channelName: string;
@@ -369,12 +408,16 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
     }
   }
 
-  // Format transcript lines
-  const transcriptLines = transcript.snippets.map(
-    (s: { text: string; start: number }) =>
-      `[${formatTimestamp(s.start)}] ${s.text}`
+  // Format transcript
+  log("Formatting transcript...");
+  const snippets: TranscriptSnippet[] = transcript.snippets.map(
+    (s: { text: string; start: number }) => ({ text: s.text, start: s.start })
   );
-  const transcriptText = transcriptLines.join("\n");
+  const { formatted: formattedTranscript } =
+    await formatTranscriptForOutput(snippets);
+
+  // Raw plain text (for summary — must not use the formatted version)
+  const plainTranscriptText = snippets.map((s) => s.text).join(" ");
 
   // Build markdown
   const today = new Date().toISOString().split("T")[0];
@@ -383,13 +426,13 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
       ? meta.description.slice(0, 200) + "..."
       : meta.description;
 
-  // Generate summary + AI tags
+  // Generate summary + AI tags (use original plain text, not formatted)
   let summarySection = "";
   let aiTags: string[] = [];
   if (!skipSummary) {
     log(`Generating summary with ${HAIKU_MODEL}...`);
     try {
-      const result = await generateSummary(meta.title, transcriptText);
+      const result = await generateSummary(meta.title, plainTranscriptText);
       summarySection = `\n## Summary\n\n${result.summary}\n`;
       aiTags = result.tags;
       log("Summary generated.");
@@ -422,7 +465,8 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
     .filter(Boolean)
     .join("\n");
 
-  const markdown = `${frontmatter}\n${summarySection}\n## Transcript\n\n${transcriptText}\n`;
+  const markdown =
+    `${frontmatter}\n${summarySection}\n## Transcript\n\n${formattedTranscript}\n`;
 
   const filename = `${sanitizeFilename(meta.title)}.md`;
   const outputPath = resolve(outputDir, filename);
