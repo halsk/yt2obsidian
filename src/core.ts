@@ -79,12 +79,9 @@ export function formatTranscriptMechanical(
 
 export async function formatTranscriptForOutput(
   snippets: TranscriptSnippet[]
-): Promise<{ formatted: string; rawLines: string[] }> {
-  const rawLines = snippets.map(
-    (s) => `[${formatTimestamp(s.start)}] ${s.text}`
-  );
+): Promise<{ formatted: string }> {
   const formatted = formatTranscriptMechanical(snippets);
-  return { formatted, rawLines };
+  return { formatted };
 }
 
 export interface VideoMeta {
@@ -416,7 +413,7 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
   const snippets: TranscriptSnippet[] = transcript.snippets.map(
     (s: { text: string; start: number }) => ({ text: s.text, start: s.start })
   );
-  const { formatted: formattedTranscript, rawLines } =
+  const { formatted: formattedTranscript } =
     await formatTranscriptForOutput(snippets);
 
   // Raw plain text (for summary — must not use the formatted version)
@@ -468,13 +465,8 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
     .filter(Boolean)
     .join("\n");
 
-  const rawSection =
-    `<details>\n<summary>Raw Transcript (元の細切れ字幕)</summary>\n\n` +
-    rawLines.join("\n") +
-    `\n\n</details>`;
-
   const markdown =
-    `${frontmatter}\n${summarySection}\n## Transcript\n\n${formattedTranscript}\n\n${rawSection}\n`;
+    `${frontmatter}\n${summarySection}\n## Transcript\n\n${formattedTranscript}\n`;
 
   const filename = `${sanitizeFilename(meta.title)}.md`;
   const outputPath = resolve(outputDir, filename);

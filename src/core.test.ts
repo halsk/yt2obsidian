@@ -185,24 +185,6 @@ describe("formatTranscriptMechanical", () => {
 });
 
 describe("formatTranscriptForOutput", () => {
-  it("rawLines length equals snippets length", async () => {
-    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
-    expect(rawLines).toHaveLength(SAMPLE_SNIPPETS.length);
-  });
-
-  it("rawLines entries have [mm:ss] prefix and original snippet text", async () => {
-    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
-    expect(rawLines[0]).toMatch(/^\[00:00\]/);
-    expect(rawLines[0]).toContain(SAMPLE_SNIPPETS[0].text);
-  });
-
-  it("all rawLines contain their corresponding original snippet text", async () => {
-    const { rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
-    rawLines.forEach((line, i) => {
-      expect(line).toContain(SAMPLE_SNIPPETS[i].text);
-    });
-  });
-
   it("formatted is a non-empty string with [mm:ss] timestamp prefix", async () => {
     const { formatted } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
     expect(typeof formatted).toBe("string");
@@ -210,9 +192,17 @@ describe("formatTranscriptForOutput", () => {
     expect(formatted).toMatch(/^\[00:00\]/);
   });
 
-  it("formatted text differs from raw joined snippets (paragraphs merged)", async () => {
-    const { formatted, rawLines } = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
-    // rawLines has one entry per snippet; formatted may have fewer paragraphs
-    expect(rawLines.length).toBeGreaterThanOrEqual(formatted.split("\n\n").length);
+  it("formatted paragraphs are separated by blank lines", async () => {
+    const snippets: TranscriptSnippet[] = [
+      { text: "first", start: 0 },
+      { text: "second", start: 60 },
+    ];
+    const { formatted } = await formatTranscriptForOutput(snippets);
+    expect(formatted.split("\n\n")).toHaveLength(2);
+  });
+
+  it("returns only formatted key (no rawLines)", async () => {
+    const result = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
+    expect(Object.keys(result)).toEqual(["formatted"]);
   });
 });
