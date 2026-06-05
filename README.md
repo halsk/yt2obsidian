@@ -68,7 +68,7 @@ npm start
 
 デフォルトで `0.0.0.0:3456` でリッスン（`PORT` 環境変数で変更可）。
 
-### 常時起動（systemd）
+### 常時起動（Linux / WSL2 — systemd）
 
 ```bash
 # サービスファイル作成
@@ -104,6 +104,25 @@ systemctl --user status yt2obsidian   # 状態確認
 systemctl --user restart yt2obsidian  # 再起動
 systemctl --user stop yt2obsidian     # 停止
 journalctl --user -u yt2obsidian -f   # ログ確認
+```
+
+### 常時起動（macOS — launchd）
+
+macOS では launchd を使い、ワンショット installer で setup できる：
+
+```bash
+./scripts/install-macos.sh
+```
+
+詳細手順・トラブルシュートは [docs/setup-macos.md](docs/setup-macos.md) を参照。
+
+管理コマンド:
+
+```bash
+launchctl list | grep yt2obsidian                                # 状態確認
+launchctl kickstart -k gui/$(id -u)/com.geolonia.yt2obsidian     # 再起動
+launchctl bootout gui/$(id -u)/com.geolonia.yt2obsidian          # 停止
+tail -f ~/Library/Logs/yt2obsidian.log                            # ログ確認
 ```
 
 ### エンドポイント
