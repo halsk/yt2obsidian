@@ -287,16 +287,28 @@ ${truncated}`,
   const text = data.content.find((b) => b.type === "text")?.text;
   if (!text) throw new Error("Empty response from Anthropic API");
 
-  try {
-    const parsed = JSON.parse(text.trim());
-    return {
-      summary: parsed.summary || text.trim(),
-      tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
-    };
-  } catch {
-    // Fallback: treat entire response as summary, no tags
-    return { summary: text.trim(), tags: [] };
+  return parseSummaryResponse(text);
+}
+
+export function parseSummaryResponse(text: string): { summary: string; tags: string[] } {
+  // Strip code fences (```json ... ``` or ``` ... ```)
+  const stripped = text.trim().replace(/^```[a-z]*\n([\s\S]*?)\n```$/m, "$1").trim();
+
+  // Extract the first {...} JSON object
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        summary: parsed.summary || stripped,
+        tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
+      };
+    } catch {
+      // fall through to fallback
+    }
   }
+
+  return { summary: text.trim(), tags: [] };
 }
 
 export function sanitizeFilename(name: string): string {
