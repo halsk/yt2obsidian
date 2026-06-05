@@ -1,5 +1,19 @@
 import { createServer } from "node:http";
-import { processVideo, syncObsidianVault, DEFAULT_OUTPUT_DIR } from "./core.js";
+import { readFile } from "node:fs/promises";
+import { join, extname, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
+import { processVideo, syncObsidianVault, DEFAULT_OUTPUT_DIR, extractYouTubeUrl } from "./core.js";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const PUBLIC_DIR = join(__dirname, "..", "public");
+
+const MIME_TYPES: Record<string, string> = {
+  ".json": "application/json",
+  ".js": "application/javascript",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".html": "text/html; charset=utf-8",
+};
 
 const PORT = parseInt(process.env.PORT || "3456", 10);
 
@@ -12,6 +26,8 @@ const HTML_FORM = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="manifest" href="/manifest.json">
 <title>YT2Obsidian</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,12 +108,20 @@ const HTML_FORM = `<!DOCTYPE html>
   <a id="bookmarklet" href="#" style="display:inline-block;padding:8px 16px;background:#333;color:#fff;border-radius:6px;text-decoration:none;font-size:0.85rem">YT2Obsidian</a>
 </details>
 <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .catch(err => console.warn('SW registration failed:', err));
+}
 const f = document.getElementById("f");
 const btn = document.getElementById("btn");
 const res = document.getElementById("result");
 const urlInput = document.getElementById("url");
 // Auto-fill from ?url= query param (bookmarklet redirect)
 const params = new URLSearchParams(location.search);
+if (params.get("done") === "1") {
+  res.className = "ok";
+  res.textContent = "✓ Transcript saved to Obsidian Vault";
+}
 if (params.get("url")) {
   urlInput.value = params.get("url");
   f.dispatchEvent(new Event("submit"));
@@ -165,6 +189,59 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HTML_FORM);
+    return;
+  }
+
+  // Static files from public/
+  if (req.method === "GET" && url.pathname.startsWith("/")) {
+    try {
+      const filePath = resolvePath(PUBLIC_DIR, "." + url.pathname);
+      // Guard against path traversal attacks
+      if (!filePath.startsWith(PUBLIC_DIR + "/") && filePath !== PUBLIC_DIR) {
+        res.writeHead(403);
+        res.end();
+        return;
+      }
+      const content = await readFile(filePath);
+      const mime = MIME_TYPES[extname(url.pathname)] || "application/octet-stream";
+      res.writeHead(200, { "Content-Type": mime });
+      res.end(content);
+      return;
+    } catch {
+      // file not found — fall through to next handler
+    }
+  }
+
+  // POST /share — Web Share Target API
+  if (req.method === "POST" && url.pathname === "/share") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const fields = Object.fromEntries(new URLSearchParams(body));
+    const youtubeUrl = extractYouTubeUrl({
+      url: fields.url,
+      text: fields.text,
+      title: fields.title,
+    });
+    if (!youtubeUrl) {
+      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("YouTube URL が見つかりません");
+      return;
+    }
+    try {
+      await processVideo({
+        url: youtubeUrl,
+        outputDir: DEFAULT_OUTPUT_DIR,
+        onProgress: (msg) => console.log(`[share] ${msg}`),
+      });
+      syncObsidianVault((msg) => console.log(`[share-sync] ${msg}`));
+      res.writeHead(302, { Location: "/?done=1" });
+      res.end();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[share] Error: ${msg}`);
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(`処理エラー: ${msg}`);
+    }
     return;
   }
 
