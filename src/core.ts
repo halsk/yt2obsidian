@@ -483,3 +483,18 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
     hasSummary: summarySection !== "",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Web Share Target helpers
+// ---------------------------------------------------------------------------
+
+export function extractYouTubeUrl(fields: { url?: string; text?: string; title?: string }): string | null {
+  const youtubePattern = /https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]+[^\s]*/;
+  for (const value of [fields.text, fields.url, fields.title]) {
+    if (value) {
+      const match = value.match(youtubePattern);
+      if (match) return match[0];
+    }
+  }
+  return null;
+}

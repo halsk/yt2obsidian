@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   extractVideoId,
+  extractYouTubeUrl,
   formatTranscriptMechanical,
   formatTranscriptForOutput,
   type TranscriptSnippet,
@@ -204,5 +205,38 @@ describe("formatTranscriptForOutput", () => {
   it("returns only formatted key (no rawLines)", async () => {
     const result = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
     expect(Object.keys(result)).toEqual(["formatted"]);
+  });
+});
+
+describe("extractYouTubeUrl", () => {
+  it("extracts from url field (standard watch URL)", () => {
+    expect(extractYouTubeUrl({ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }))
+      .toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  });
+
+  it("extracts from text field (youtu.be short URL)", () => {
+    expect(extractYouTubeUrl({ text: "Check this out https://youtu.be/dQw4w9WgXcQ !" }))
+      .toBe("https://youtu.be/dQw4w9WgXcQ");
+  });
+
+  it("extracts from text field (shorts URL)", () => {
+    expect(extractYouTubeUrl({ text: "https://www.youtube.com/shorts/abc123XYZ" }))
+      .toBe("https://www.youtube.com/shorts/abc123XYZ");
+  });
+
+  it("prefers text over url field", () => {
+    expect(extractYouTubeUrl({
+      text: "https://youtu.be/fromText",
+      url: "https://www.youtube.com/watch?v=fromUrl",
+    })).toBe("https://youtu.be/fromText");
+  });
+
+  it("returns null when no YouTube URL found", () => {
+    expect(extractYouTubeUrl({ url: "https://example.com", text: "no youtube here" }))
+      .toBeNull();
+  });
+
+  it("returns null for empty fields", () => {
+    expect(extractYouTubeUrl({})).toBeNull();
   });
 });
