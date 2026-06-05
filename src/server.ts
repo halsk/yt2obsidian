@@ -167,6 +167,54 @@ f.addEventListener("submit", async (e) => {
 </html>`;
 
 // ---------------------------------------------------------------------------
+// Share Target progress page
+// Processing (transcript + AI summary) is slow (~10-30s). Doing it
+// synchronously in POST /share leaves the PWA on a blank/black screen with no
+// feedback. Instead, /share returns this page immediately; its script drives
+// /api/transcript and shows a spinner + result.
+// ---------------------------------------------------------------------------
+
+const SHARE_PAGE = (youtubeUrl: string | null): string => {
+  const inner = youtubeUrl
+    ? `<div id="status"><span class="spin">⏳</span> 処理中… 字幕取得 + AI要約で30秒ほどかかります</div>
+<script>
+const url = ${JSON.stringify(youtubeUrl)};
+const el = document.getElementById("status");
+fetch("/api/transcript", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) })
+  .then(async (r) => {
+    const d = await r.json();
+    if (r.ok) { el.className = "ok"; el.textContent = "✓ 保存完了: " + (d.title || "") + " (" + (d.filename || "") + " / 要約:" + (d.hasSummary ? "あり" : "スキップ") + ")"; }
+    else { el.className = "err"; el.textContent = "✗ エラー: " + (d.error || r.statusText); }
+  })
+  .catch((e) => { el.className = "err"; el.textContent = "✗ ネットワークエラー: " + e.message; });
+</script>`
+    : `<div id="status" class="err">✗ YouTube URL が見つかりませんでした</div>`;
+  return `<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="manifest" href="/manifest.json">
+<title>YT2Obsidian</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 24px; min-height: 100dvh; display: flex; flex-direction: column; gap: 18px; }
+  h1 { font-size: 1.3rem; color: #fff; }
+  #status { font-size: 1.05rem; line-height: 1.6; padding: 16px; border-radius: 10px; background: #1a1a1a; border: 1px solid #333; word-break: break-word; }
+  #status.ok { background: #1a3a1a; border-color: #2a5a2a; }
+  #status.err { background: #3a1a1a; border-color: #5a2a2a; }
+  #status small { color: #9b9; font-size: 0.8rem; }
+  .spin { display: inline-block; animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+  a { color: #58a6ff; font-size: 0.9rem; }
+</style></head>
+<body>
+<h1>YT2Obsidian</h1>
+${inner}
+<a href="/">← フォームに戻る</a>
+</body></html>`;
+};
+
+// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
@@ -212,7 +260,9 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  // POST /share — Web Share Target API
+  // POST /share — Web Share Target API.
+  // Return the progress page immediately; it drives /api/transcript client-side
+  // and shows a spinner + result. (Synchronous processing here = blank PWA.)
   if (req.method === "POST" && url.pathname === "/share") {
     let body = "";
     for await (const chunk of req) body += chunk;
@@ -222,26 +272,9 @@ const server = createServer(async (req, res) => {
       text: fields.text,
       title: fields.title,
     });
-    if (!youtubeUrl) {
-      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("YouTube URL が見つかりません");
-      return;
-    }
-    try {
-      await processVideo({
-        url: youtubeUrl,
-        outputDir: DEFAULT_OUTPUT_DIR,
-        onProgress: (msg) => console.log(`[share] ${msg}`),
-      });
-      syncObsidianVault((msg) => console.log(`[share-sync] ${msg}`));
-      res.writeHead(302, { Location: "/?done=1" });
-      res.end();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[share] Error: ${msg}`);
-      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end(`処理エラー: ${msg}`);
-    }
+    console.log(`[share] received → youtubeUrl=${youtubeUrl ?? "(none)"}`);
+    res.writeHead(youtubeUrl ? 200 : 400, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(SHARE_PAGE(youtubeUrl));
     return;
   }
 
