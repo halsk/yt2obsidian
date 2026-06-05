@@ -4,6 +4,7 @@ import {
   extractYouTubeUrl,
   formatTranscriptMechanical,
   formatTranscriptForOutput,
+  parseSummaryResponse,
   type TranscriptSnippet,
 } from "./core.js";
 
@@ -205,6 +206,45 @@ describe("formatTranscriptForOutput", () => {
   it("returns only formatted key (no rawLines)", async () => {
     const result = await formatTranscriptForOutput(SAMPLE_SNIPPETS);
     expect(Object.keys(result)).toEqual(["formatted"]);
+  });
+});
+
+describe("parseSummaryResponse", () => {
+  it("a) parses JSON wrapped in ```json fence", () => {
+    const input = '```json\n{"summary":"- 箇条書き","tags":["ai","tech"]}\n```';
+    const result = parseSummaryResponse(input);
+    expect(result.summary).toBe("- 箇条書き");
+    expect(result.tags).toEqual(["ai", "tech"]);
+    expect(result.summary).not.toContain("```");
+    expect(result.summary).not.toContain("{");
+  });
+
+  it("b) parses plain JSON without fence", () => {
+    const input = '{"summary":"テスト","tags":["a","b"]}';
+    const result = parseSummaryResponse(input);
+    expect(result.summary).toBe("テスト");
+    expect(result.tags).toEqual(["a", "b"]);
+  });
+
+  it("c) parses JSON wrapped in ``` fence without lang", () => {
+    const input = '```\n{"summary":"no-lang","tags":["x"]}\n```';
+    const result = parseSummaryResponse(input);
+    expect(result.summary).toBe("no-lang");
+    expect(result.tags).toEqual(["x"]);
+  });
+
+  it("d) extracts first {...} from text with surrounding prose", () => {
+    const input = '前文\n{"summary":"s","tags":[]}\n後文';
+    const result = parseSummaryResponse(input);
+    expect(result.summary).toBe("s");
+    expect(result.tags).toEqual([]);
+  });
+
+  it("e) fallback for broken input: summary=input, tags=[]", () => {
+    const input = "壊れた文字列";
+    const result = parseSummaryResponse(input);
+    expect(result.summary).toBe("壊れた文字列");
+    expect(result.tags).toEqual([]);
   });
 });
 
