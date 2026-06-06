@@ -40,10 +40,17 @@ loadEnv();
 // Constants & Types
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_OUTPUT_DIR = resolve(
-  process.env.HOME || "/home/hal",
-  "workspace/obsidian/raw/articles"
-);
+// Output directory for generated notes. Configurable via OBSIDIAN_OUTPUT_DIR
+// (env / .env); falls back to the historical ~/workspace/obsidian/raw/articles.
+export function resolveOutputDir(
+  env: Record<string, string | undefined> = process.env
+): string {
+  return env.OBSIDIAN_OUTPUT_DIR
+    ? resolve(env.OBSIDIAN_OUTPUT_DIR)
+    : resolve(env.HOME || "/home/hal", "workspace/obsidian/raw/articles");
+}
+
+export const DEFAULT_OUTPUT_DIR = resolveOutputDir();
 
 // ---------------------------------------------------------------------------
 // Transcript formatting (mechanical)
@@ -332,16 +339,30 @@ function escapeYamlString(s: string): string {
 // Obsidian Vault sync (git commit & push)
 // ---------------------------------------------------------------------------
 
-const OBSIDIAN_VAULT_DIR = resolve(
-  process.env.HOME || "/home/hal",
-  "workspace/obsidian"
-);
+// Vault directory for git sync. Configurable via OBSIDIAN_VAULT_DIR (env / .env);
+// falls back to the historical ~/workspace/obsidian.
+export function resolveVaultDir(
+  env: Record<string, string | undefined> = process.env
+): string {
+  return env.OBSIDIAN_VAULT_DIR
+    ? resolve(env.OBSIDIAN_VAULT_DIR)
+    : resolve(env.HOME || "/home/hal", "workspace/obsidian");
+}
 
 export function syncObsidianVault(log?: (msg: string) => void): void {
   const print = log || (() => {});
+
+  // Skip when git is managed externally (e.g. the Obsidian github-sync plugin),
+  // to avoid double-committer races against the same vault.
+  if (process.env.OBSIDIAN_SKIP_GIT_SYNC === "1") {
+    print("Obsidian vault: git sync skipped (OBSIDIAN_SKIP_GIT_SYNC=1)");
+    return;
+  }
+
+  const vaultDir = resolveVaultDir();
   try {
     const status = execSync("git status --porcelain", {
-      cwd: OBSIDIAN_VAULT_DIR,
+      cwd: vaultDir,
       encoding: "utf-8",
     }).trim();
 
@@ -350,16 +371,16 @@ export function syncObsidianVault(log?: (msg: string) => void): void {
       return;
     }
 
-    execSync("git add -A", { cwd: OBSIDIAN_VAULT_DIR, stdio: "pipe" });
+    execSync("git add -A", { cwd: vaultDir, stdio: "pipe" });
 
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
     execSync(`git commit -m "yt2obsidian: auto-sync ${timestamp}"`, {
-      cwd: OBSIDIAN_VAULT_DIR,
+      cwd: vaultDir,
       stdio: "pipe",
     });
 
     execSync("git pull --rebase && git push", {
-      cwd: OBSIDIAN_VAULT_DIR,
+      cwd: vaultDir,
       stdio: "pipe",
     });
 
