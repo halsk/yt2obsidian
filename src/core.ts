@@ -522,7 +522,9 @@ export async function processVideo(opts: ProcessOptions): Promise<ProcessResult>
 // ---------------------------------------------------------------------------
 
 export function extractYouTubeUrl(fields: { url?: string; text?: string; title?: string }): string | null {
-  const youtubePattern = /https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]+[^\s]*/;
+  // Mirror the URL shapes extractVideoId() accepts. live/ + embed/ were missing,
+  // so sharing a YouTube Live (youtube.com/live/...) from Android failed the gate.
+  const youtubePattern = /https?:\/\/(www\.)?(youtube\.com\/(watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)[\w-]+[^\s]*/;
   for (const value of [fields.text, fields.url, fields.title]) {
     if (value) {
       const match = value.match(youtubePattern);
